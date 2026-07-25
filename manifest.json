@@ -1,0 +1,10 @@
+{
+  "id": "obsidian-voice2text",
+  "name": "Voice to Text",
+  "version": "0.1.0",
+  "minAppVersion": "1.5.0",
+  "description": "Record speech and insert recognized text at the editor cursor using Volcengine ASR or Xiaomi MiMo ASR.",
+  "author": "chenxuan",
+  "authorUrl": "https://github.com/chenxuan520",
+  "isDesktopOnly": true
+}

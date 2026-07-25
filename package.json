@@ -1,0 +1,40 @@
+{
+  "name": "obsidian-voice2text",
+  "version": "0.1.0",
+  "description": "Voice to text for Obsidian, powered by Volcengine ASR and Xiaomi MiMo ASR",
+  "main": "main.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chenxuan520/obsidian-voice2text.git"
+  },
+  "homepage": "https://github.com/chenxuan520/obsidian-voice2text#readme",
+  "bugs": {
+    "url": "https://github.com/chenxuan520/obsidian-voice2text/issues"
+  },
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc --noEmit --skipLibCheck && node esbuild.config.mjs production",
+    "test": "esbuild tests/unit.test.ts --bundle --platform=node --format=cjs --outfile=tests/unit.test.cjs && node --test tests/unit.test.cjs",
+    "test:live": "esbuild tests/live.test.ts --bundle --platform=node --format=cjs --alias:obsidian=./tests/obsidian-shim.ts --outfile=tests/live.test.cjs && node tests/live.test.cjs"
+  },
+  "keywords": [
+    "obsidian",
+    "speech-to-text",
+    "volcengine",
+    "xiaomi",
+    "mimo",
+    "asr"
+  ],
+  "author": "chenxuan",
+  "license": "MIT",
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.9",
+    "@types/ws": "^8.18.0",
+    "esbuild": "^0.25.0",
+    "obsidian": "latest",
+    "typescript": "^5.8.2"
+  }
+}

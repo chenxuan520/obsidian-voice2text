@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Build plugin
+        run: npm run build
+
+      - name: Validate metadata
+        run: >-
+          node -e 'const fs=require("fs");
+          const p=JSON.parse(fs.readFileSync("package.json","utf8"));
+          const m=JSON.parse(fs.readFileSync("manifest.json","utf8"));
+          const v=JSON.parse(fs.readFileSync("versions.json","utf8"));
+          if(p.version!==m.version||v[m.version]!==m.minAppVersion)
+          throw new Error("release metadata mismatch");'
+
+      - name: Package plugin
+        run: zip -j obsidian-voice2text.zip main.js manifest.json styles.css
+
+      - name: Upload plugin artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: obsidian-voice2text
+          path: |
+            main.js
+            manifest.json
+            styles.css
+            obsidian-voice2text.zip

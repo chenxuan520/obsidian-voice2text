@@ -1,0 +1,7 @@
+node_modules/
+.opencode/
+main.js
+*.map
+data.json
+tests/*.test.cjs
+.DS_Store
