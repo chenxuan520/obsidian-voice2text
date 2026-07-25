@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto"
-import os from "node:os"
 import zlib from "node:zlib"
 import WebSocket, { type RawData } from "ws"
 import { startPcmRecording, type PcmRecorder } from "../recorder"
@@ -230,11 +229,11 @@ function buildRequest(settings: Voice2TextSettings): Record<string, unknown> {
 
   return {
     user: {
-      uid: os.userInfo().username,
-      did: os.hostname(),
+      uid: "obsidian-user",
+      did: "obsidian",
       platform: process.platform,
       sdk_version: "obsidian-plugin",
-      app_version: "obsidian-voice2text",
+      app_version: "voice2text",
     },
     audio,
     request: {

@@ -1,4 +1,4 @@
-# Obsidian Voice to Text
+# Voice2Text
 
 [![CI](https://github.com/chenxuan520/obsidian-voice2text/actions/workflows/ci.yml/badge.svg)](https://github.com/chenxuan520/obsidian-voice2text/actions/workflows/ci.yml)
 [![GitHub release](https://img.shields.io/github/v/release/chenxuan520/obsidian-voice2text)](https://github.com/chenxuan520/obsidian-voice2text/releases)
@@ -15,9 +15,16 @@
 
 插件使用 Node.js TLS/WebSocket 能力给火山引擎请求添加鉴权头，因此只支持 Obsidian 桌面端。
 
+## 网络与隐私
+
+- 插件仅在用户主动录音时连接所选服务。选择火山引擎时，麦克风 PCM 音频会流式发送到火山引擎；选择小米 MiMo 时，录音会封装为 WAV 并在停止后发送到小米 MiMo。
+- 两种服务都需要用户自行申请账号和 API 凭证，服务商可能按其计费规则收费。
+- App ID、Access Token 和 API Key 仅保存在当前 Vault 的 `.obsidian/plugins/voice2text/data.json`，不会写入笔记或发送给其它服务。
+- 插件不包含客户端遥测、广告或自动更新机制，也不会发送本机用户名和主机名。
+
 ## 安装
 
-从 [Releases](https://github.com/chenxuan520/obsidian-voice2text/releases) 下载最新版 ZIP，解压到 Vault 的 `.obsidian/plugins/obsidian-voice2text/`，然后在 Obsidian 的第三方插件设置中启用。
+从 [Releases](https://github.com/chenxuan520/obsidian-voice2text/releases) 下载最新版 ZIP，解压到 Vault 的 `.obsidian/plugins/voice2text/`，然后在 Obsidian 的第三方插件设置中启用。
 
 ## 火山引擎配置
 
@@ -49,7 +56,7 @@ npm test
 npm run build
 ```
 
-构建产物为根目录下的 `main.js`。本地安装时，将以下文件放入 Vault 的 `.obsidian/plugins/obsidian-voice2text/`：
+构建产物为根目录下的 `main.js`。本地安装时，将以下文件放入 Vault 的 `.obsidian/plugins/voice2text/`：
 
 - `main.js`
 - `manifest.json`
@@ -68,4 +75,4 @@ npm run test:live
 ## CI/CD
 
 - push 和 pull request 自动执行单元测试、类型检查和生产构建，并上传可安装插件 ZIP。
-- 推送与 `package.json`、`manifest.json` 版本一致的 `v*` 标签时，自动创建 GitHub Release 并上传三个插件文件和 ZIP。
+- 推送与 `package.json`、`manifest.json` 版本完全一致的标签（例如 `0.1.1`）时，自动创建 GitHub Release 并上传三个插件文件和 ZIP。

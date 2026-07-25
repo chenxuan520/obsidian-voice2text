@@ -295,7 +295,6 @@ class Voice2TextSettingTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this
     containerEl.empty()
-    containerEl.createEl("h2", { text: "语音转文字" })
 
     new Setting(containerEl)
       .setName("识别服务")
@@ -349,7 +348,7 @@ class Voice2TextSettingTab extends PluginSettingTab {
 
   private displayVolcengineSettings(containerEl: HTMLElement): void {
     const config = this.plugin.settings.providerConfig.volcengine
-    containerEl.createEl("h3", { text: "火山引擎大模型 ASR" })
+    new Setting(containerEl).setName("火山引擎大模型 ASR").setHeading()
 
     this.addTextSetting(containerEl, "App ID", "火山引擎语音识别应用的 App ID。", config, "appId")
     this.addTextSetting(containerEl, "Access Token", "凭证只保存在当前 Vault 的插件数据中。", config, "accessToken", true)
@@ -372,7 +371,7 @@ class Voice2TextSettingTab extends PluginSettingTab {
 
   private displayMimoSettings(containerEl: HTMLElement): void {
     const config = this.plugin.settings.providerConfig.mimo
-    containerEl.createEl("h3", { text: "小米 MiMo ASR" })
+    new Setting(containerEl).setName("小米 MiMo ASR").setHeading()
 
     this.addTextSetting(containerEl, "API Key", "小米 MiMo 开放平台的 api-key，只保存在当前 Vault。", config, "apiKey", true)
     this.addTextSetting(containerEl, "模型", "默认使用 mimo-v2.5-asr。", config, "model")

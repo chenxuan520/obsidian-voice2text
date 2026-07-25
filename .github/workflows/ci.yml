@@ -43,14 +43,14 @@ jobs:
           throw new Error("release metadata mismatch");'
 
       - name: Package plugin
-        run: zip -j obsidian-voice2text.zip main.js manifest.json styles.css
+        run: zip -j voice2text.zip main.js manifest.json styles.css
 
       - name: Upload plugin artifact
         uses: actions/upload-artifact@v7
         with:
-          name: obsidian-voice2text
+          name: voice2text
           path: |
             main.js
             manifest.json
             styles.css
-            obsidian-voice2text.zip
+            voice2text.zip
