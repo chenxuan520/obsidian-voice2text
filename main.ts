@@ -7,6 +7,7 @@ import {
   Plugin,
   PluginSettingTab,
   Setting,
+  type SettingDefinitionItem,
 } from "obsidian"
 import { getProvider, listProviders } from "./src/providers"
 import { advancePosition, copyPosition, finalSuffix } from "./src/text"
@@ -76,6 +77,7 @@ export default class Voice2TextPlugin extends Plugin {
     this.addCommand({
       id: "toggle-voice-input",
       name: "开始/停止语音转文字",
+      hotkeys: [{ modifiers: ["Ctrl"], key: "s" }],
       editorCallback: () => void this.toggleRecording(),
     })
 
@@ -292,95 +294,188 @@ class Voice2TextSettingTab extends PluginSettingTab {
     super(app, plugin)
   }
 
+  getSettingDefinitions(): SettingDefinitionItem[] {
+    const volcengine = this.plugin.settings.providerConfig.volcengine
+    const mimo = this.plugin.settings.providerConfig.mimo
+    const refresh = () => undefined
+
+    return [
+      {
+        name: "识别服务",
+        desc: "火山引擎支持边说边写；小米 MiMo 在停止录音后整段识别。",
+        render: (setting) => this.addProviderControl(setting, refresh),
+      },
+      {
+        name: "最长录音时间",
+        desc: this.durationDescription(),
+        render: (setting) => this.addDurationControl(setting),
+      },
+      {
+        name: "识别结果后添加空格",
+        desc: "适合连续口述；关闭后会紧接光标后的内容。",
+        render: (setting) => this.addTrailingSpaceControl(setting),
+      },
+      {
+        type: "group",
+        heading: "火山引擎大模型 ASR",
+        items: [
+          {
+            name: "App ID",
+            desc: "火山引擎语音识别应用的 App ID。",
+            render: (setting) => this.addTextControl(setting, volcengine, "appId"),
+          },
+          {
+            name: "Access Token",
+            desc: "凭证只保存在当前 Vault 的插件数据中。",
+            render: (setting) => this.addTextControl(setting, volcengine, "accessToken", true),
+          },
+          {
+            name: "Resource ID",
+            desc: "需与控制台开通的资源一致。",
+            render: (setting) => this.addTextControl(setting, volcengine, "resourceId"),
+          },
+          {
+            name: "WebSocket 地址",
+            desc: "大模型流式语音识别接口。",
+            render: (setting) => this.addTextControl(setting, volcengine, "endpoint"),
+          },
+          {
+            name: "识别语言",
+            desc: "例如 zh-CN；留空则由服务端处理。",
+            render: (setting) => this.addTextControl(setting, volcengine, "language"),
+          },
+          {
+            name: "静音判停窗口",
+            desc: "火山引擎 end_window_size，单位为毫秒。",
+            render: (setting) => this.addEndWindowControl(setting, volcengine),
+          },
+        ],
+      },
+      {
+        type: "group",
+        heading: "小米 MiMo ASR",
+        items: [
+          {
+            name: "API Key",
+            desc: "小米 MiMo 开放平台的 API Key，只保存在当前 Vault。",
+            render: (setting) => this.addTextControl(setting, mimo, "apiKey", true),
+          },
+          {
+            name: "模型",
+            desc: "默认使用 mimo-v2.5-asr。",
+            render: (setting) => this.addTextControl(setting, mimo, "model"),
+          },
+          {
+            name: "API 地址",
+            desc: "兼容 /v1 或完整 chat/completions 地址。",
+            render: (setting) => this.addTextControl(setting, mimo, "endpoint"),
+          },
+          {
+            name: "识别语言",
+            desc: "明确语种时手动指定可提高准确率。",
+            render: (setting) => this.addMimoLanguageControl(setting, mimo),
+          },
+        ],
+      },
+    ]
+  }
+
   display(): void {
+    this.renderLegacySettings()
+  }
+
+  private renderLegacySettings(): void {
     const { containerEl } = this
     containerEl.empty()
 
-    new Setting(containerEl)
+    this.addProviderControl(new Setting(containerEl)
       .setName("识别服务")
-      .setDesc("火山引擎支持边说边写；小米 MiMo 在停止录音后整段识别。")
-      .addDropdown((dropdown) => {
-        for (const provider of listProviders()) dropdown.addOption(provider.id, provider.displayName)
-        dropdown.setValue(this.plugin.settings.provider)
-        dropdown.onChange(async (value) => {
-          this.plugin.settings.provider = value as ProviderId
-          if (value === "mimo") {
-            this.plugin.settings.maxDurationSeconds = Math.min(
-              this.plugin.settings.maxDurationSeconds,
-              240,
-            )
-          }
-          await this.plugin.saveSettings()
-          this.display()
-        })
-      })
+      .setDesc("火山引擎支持边说边写；小米 MiMo 在停止录音后整段识别。"), () => this.renderLegacySettings())
 
-    new Setting(containerEl)
+    this.addDurationControl(new Setting(containerEl)
       .setName("最长录音时间")
-      .setDesc(this.plugin.settings.provider === "mimo"
-        ? "达到上限后自动停止。MiMo 受 10MB 音频上限约束，最多 240 秒。"
-        : "达到上限后自动停止，单位为秒。")
-      .addSlider((slider) => slider
-        .setLimits(30, this.plugin.settings.provider === "mimo" ? 240 : 600, 30)
-        .setValue(this.plugin.settings.maxDurationSeconds)
-        .setDynamicTooltip()
-        .onChange(async (value) => {
-          this.plugin.settings.maxDurationSeconds = value
-          await this.plugin.saveSettings()
-        }))
+      .setDesc(this.durationDescription()))
 
-    new Setting(containerEl)
+    this.addTrailingSpaceControl(new Setting(containerEl)
       .setName("识别结果后添加空格")
-      .setDesc("适合连续口述；关闭后会紧接光标后的内容。")
-      .addToggle((toggle) => toggle
-        .setValue(this.plugin.settings.appendTrailingSpace)
-        .onChange(async (value) => {
-          this.plugin.settings.appendTrailingSpace = value
-          await this.plugin.saveSettings()
-        }))
+      .setDesc("适合连续口述；关闭后会紧接光标后的内容。"))
 
     if (this.plugin.settings.provider === "volcengine") {
-      this.displayVolcengineSettings(containerEl)
+      const config = this.plugin.settings.providerConfig.volcengine
+      new Setting(containerEl).setName("火山引擎大模型 ASR").setHeading()
+      this.addTextSetting(containerEl, "App ID", "火山引擎语音识别应用的 App ID。", config, "appId")
+      this.addTextSetting(containerEl, "Access Token", "凭证只保存在当前 Vault 的插件数据中。", config, "accessToken", true)
+      this.addTextSetting(containerEl, "Resource ID", "需与控制台开通的资源一致。", config, "resourceId")
+      this.addTextSetting(containerEl, "WebSocket 地址", "大模型流式语音识别接口。", config, "endpoint")
+      this.addTextSetting(containerEl, "识别语言", "例如 zh-CN；留空则由服务端处理。", config, "language")
+      this.addEndWindowControl(new Setting(containerEl)
+        .setName("静音判停窗口")
+        .setDesc("火山引擎 end_window_size，单位为毫秒。"), config)
     } else {
-      this.displayMimoSettings(containerEl)
+      const config = this.plugin.settings.providerConfig.mimo
+      new Setting(containerEl).setName("小米 MiMo ASR").setHeading()
+      this.addTextSetting(containerEl, "API Key", "小米 MiMo 开放平台的 API Key，只保存在当前 Vault。", config, "apiKey", true)
+      this.addTextSetting(containerEl, "模型", "默认使用 mimo-v2.5-asr。", config, "model")
+      this.addTextSetting(containerEl, "API 地址", "兼容 /v1 或完整 chat/completions 地址。", config, "endpoint")
+      this.addMimoLanguageControl(new Setting(containerEl)
+        .setName("识别语言")
+        .setDesc("明确语种时手动指定可提高准确率。"), config)
     }
   }
 
-  private displayVolcengineSettings(containerEl: HTMLElement): void {
-    const config = this.plugin.settings.providerConfig.volcengine
-    new Setting(containerEl).setName("火山引擎大模型 ASR").setHeading()
-
-    this.addTextSetting(containerEl, "App ID", "火山引擎语音识别应用的 App ID。", config, "appId")
-    this.addTextSetting(containerEl, "Access Token", "凭证只保存在当前 Vault 的插件数据中。", config, "accessToken", true)
-    this.addTextSetting(containerEl, "Resource ID", "需与控制台开通的资源一致。", config, "resourceId")
-    this.addTextSetting(containerEl, "WebSocket 地址", "大模型流式语音识别接口。", config, "endpoint")
-    this.addTextSetting(containerEl, "识别语言", "例如 zh-CN；留空则由服务端处理。", config, "language")
-
-    new Setting(containerEl)
-      .setName("静音判停窗口")
-      .setDesc("火山引擎 end_window_size，单位为毫秒。")
-      .addSlider((slider) => slider
-        .setLimits(200, 5000, 100)
-        .setValue(config.endWindowSize)
-        .setDynamicTooltip()
-        .onChange(async (value) => {
-          config.endWindowSize = value
-          await this.plugin.saveSettings()
-        }))
+  private durationDescription(): string {
+    return "达到上限后自动停止。火山引擎最多 600 秒；MiMo 受 10MB 音频上限约束，最多 240 秒。"
   }
 
-  private displayMimoSettings(containerEl: HTMLElement): void {
-    const config = this.plugin.settings.providerConfig.mimo
-    new Setting(containerEl).setName("小米 MiMo ASR").setHeading()
+  private addProviderControl(setting: Setting, refresh: () => void): void {
+    setting.addDropdown((dropdown) => {
+      for (const provider of listProviders()) dropdown.addOption(provider.id, provider.displayName)
+      dropdown.setValue(this.plugin.settings.provider)
+      dropdown.onChange(async (value) => {
+        this.plugin.settings.provider = value as ProviderId
+        if (value === "mimo") {
+          this.plugin.settings.maxDurationSeconds = Math.min(this.plugin.settings.maxDurationSeconds, 240)
+        }
+        await this.plugin.saveSettings()
+        refresh()
+      })
+    })
+  }
 
-    this.addTextSetting(containerEl, "API Key", "小米 MiMo 开放平台的 api-key，只保存在当前 Vault。", config, "apiKey", true)
-    this.addTextSetting(containerEl, "模型", "默认使用 mimo-v2.5-asr。", config, "model")
-    this.addTextSetting(containerEl, "API 地址", "兼容 /v1 或完整 chat/completions 地址。", config, "endpoint")
+  private addDurationControl(setting: Setting): void {
+    setting.addSlider((slider) => slider
+      .setLimits(30, 600, 30)
+      .setValue(this.plugin.settings.maxDurationSeconds)
+      .onChange(async (value) => {
+        const maximum = this.plugin.settings.provider === "mimo" ? 240 : 600
+        const duration = Math.min(value, maximum)
+        this.plugin.settings.maxDurationSeconds = duration
+        if (duration !== value) slider.setValue(duration)
+        await this.plugin.saveSettings()
+      }))
+  }
 
-    new Setting(containerEl)
-      .setName("识别语言")
-      .setDesc("明确语种时手动指定可提高准确率。")
-      .addDropdown((dropdown) => dropdown
+  private addTrailingSpaceControl(setting: Setting): void {
+    setting.addToggle((toggle) => toggle
+      .setValue(this.plugin.settings.appendTrailingSpace)
+      .onChange(async (value) => {
+        this.plugin.settings.appendTrailingSpace = value
+        await this.plugin.saveSettings()
+      }))
+  }
+
+  private addEndWindowControl(setting: Setting, config: VolcengineConfig): void {
+    setting.addSlider((slider) => slider
+      .setLimits(200, 5000, 100)
+      .setValue(config.endWindowSize)
+      .onChange(async (value) => {
+        config.endWindowSize = value
+        await this.plugin.saveSettings()
+      }))
+  }
+
+  private addMimoLanguageControl(setting: Setting, config: MimoConfig): void {
+    setting.addDropdown((dropdown) => dropdown
         .addOption("auto", "自动检测")
         .addOption("zh", "中文")
         .addOption("en", "英文")
@@ -401,16 +496,19 @@ class Voice2TextSettingTab extends PluginSettingTab {
     key: K,
     password = false,
   ): void {
-    new Setting(containerEl)
-      .setName(name)
-      .setDesc(description)
-      .addText((text) => {
-        text.setValue(config[key] as string)
-        text.onChange(async (value) => {
-          config[key] = value as T[K]
-          await this.plugin.saveSettings()
-        })
-        if (password) text.inputEl.type = "password"
+    this.addTextControl(new Setting(containerEl).setName(name).setDesc(description), config, key, password)
+  }
+
+  private addTextControl<T extends VolcengineConfig | MimoConfig, K extends {
+    [P in keyof T]: T[P] extends string ? P : never
+  }[keyof T]>(setting: Setting, config: T, key: K, password = false): void {
+    setting.addText((text) => {
+      text.setValue(config[key] as string)
+      text.onChange(async (value) => {
+        config[key] = value as T[K]
+        await this.plugin.saveSettings()
       })
+      if (password) text.inputEl.type = "password"
+    })
   }
 }

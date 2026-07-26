@@ -1,6 +1,6 @@
 {
   "name": "obsidian-voice2text",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Voice to text for Obsidian, powered by Volcengine ASR and Xiaomi MiMo ASR",
   "main": "main.js",
   "repository": {
@@ -14,6 +14,7 @@
   "scripts": {
     "dev": "node esbuild.config.mjs",
     "build": "tsc --noEmit --skipLibCheck && node esbuild.config.mjs production",
+    "lint": "eslint main.ts src",
     "test": "esbuild tests/unit.test.ts --bundle --platform=node --format=cjs --outfile=tests/unit.test.cjs && node --test tests/unit.test.cjs",
     "test:live": "esbuild tests/live.test.ts --bundle --platform=node --format=cjs --alias:obsidian=./tests/obsidian-shim.ts --outfile=tests/live.test.cjs && node tests/live.test.cjs"
   },
@@ -30,11 +31,20 @@
   "dependencies": {
     "ws": "^8.18.0"
   },
+  "overrides": {
+    "brace-expansion": "5.0.8",
+    "minimatch": "10.2.5"
+  },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@eslint/json": "^0.14.0",
     "@types/node": "^22.13.9",
     "@types/ws": "^8.18.0",
     "esbuild": "^0.25.0",
+    "eslint": "^9.39.5",
+    "eslint-plugin-obsidianmd": "^0.4.1",
     "obsidian": "latest",
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.2",
+    "typescript-eslint": "^8.65.0"
   }
 }

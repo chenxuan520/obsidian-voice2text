@@ -23,7 +23,20 @@ const AUDIO_CHUNK_MS = 200
 
 type VolcengineResponse = {
   flags: number
-  data: any
+  data: unknown
+}
+
+type VolcengineUtterance = {
+  definite?: unknown
+  text?: unknown
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function errorOf(value: unknown): Error {
+  return value instanceof Error ? value : new Error(String(value))
 }
 
 function buildProtocolHeader(
@@ -94,10 +107,10 @@ function parseServerMessage(message: Buffer): VolcengineResponse {
   const payload = message.subarray(offset, offset + payloadSize)
   const body = compression === COMPRESSION_GZIP ? zlib.gunzipSync(payload) : payload
 
-  return {
-    flags,
-    data: serialization === SERIALIZATION_JSON ? JSON.parse(body.toString("utf8")) : body,
-  }
+  const data: unknown = serialization === SERIALIZATION_JSON
+    ? JSON.parse(body.toString("utf8")) as unknown
+    : body
+  return { flags, data }
 }
 
 function rawDataToBuffer(data: RawData): Buffer {
@@ -137,13 +150,13 @@ class BinarySocket {
 
   async open(): Promise<Record<string, string>> {
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
+      const timer = window.setTimeout(() => {
         cleanup()
         this.socket.terminate()
         reject(new Error("连接火山引擎 ASR 超时。"))
       }, NETWORK_TIMEOUT_MS)
       const cleanup = () => {
-        clearTimeout(timer)
+        window.clearTimeout(timer)
         this.socket.off("open", onOpen)
         this.socket.off("error", onError)
       }
@@ -173,19 +186,19 @@ class BinarySocket {
     if (this.closedError) return Promise.reject(this.closedError)
 
     return new Promise((resolve, reject) => {
-      let timer: ReturnType<typeof setTimeout> | undefined
+      let timer: number | undefined
       const waiter = {
         resolve: (value: Buffer) => {
-          if (timer) clearTimeout(timer)
+          if (timer) window.clearTimeout(timer)
           resolve(value)
         },
         reject: (error: Error) => {
-          if (timer) clearTimeout(timer)
+          if (timer) window.clearTimeout(timer)
           reject(error)
         },
       }
       if (timeoutMs !== undefined) {
-        timer = setTimeout(() => {
+        timer = window.setTimeout(() => {
           const index = this.waiters.indexOf(waiter)
           if (index >= 0) this.waiters.splice(index, 1)
           reject(new Error("等待火山引擎 ASR 响应超时。"))
@@ -198,12 +211,12 @@ class BinarySocket {
   async close(): Promise<void> {
     if (this.socket.readyState === WebSocket.CLOSED) return
     await new Promise<void>((resolve) => {
-      const timer = setTimeout(() => {
+      const timer = window.setTimeout(() => {
         this.socket.terminate()
         resolve()
       }, 300)
       this.socket.once("close", () => {
-        clearTimeout(timer)
+        window.clearTimeout(timer)
         resolve()
       })
       this.socket.close()
@@ -248,11 +261,23 @@ function buildRequest(settings: Voice2TextSettings): Record<string, unknown> {
   }
 }
 
-function stableTextOf(data: any): string {
-  const utterances = Array.isArray(data?.result?.utterances) ? data.result.utterances : []
+function resultOf(data: unknown): Record<string, unknown> | undefined {
+  if (!isRecord(data) || !isRecord(data.result)) return undefined
+  return data.result
+}
+
+function transcriptTextOf(data: unknown): string {
+  const text = resultOf(data)?.text
+  return typeof text === "string" ? text.trim() : ""
+}
+
+function stableTextOf(data: unknown): string {
+  const value = resultOf(data)?.utterances
+  if (!Array.isArray(value)) return ""
+  const utterances = value.filter((item): item is VolcengineUtterance => isRecord(item))
   return utterances
-    .filter((item: any) => item?.definite && typeof item.text === "string" && item.text.trim())
-    .map((item: any) => item.text)
+    .filter((item) => item.definite === true && typeof item.text === "string" && item.text.trim())
+    .map((item) => item.text as string)
     .join("")
     .trim()
 }
@@ -265,15 +290,15 @@ function suffixAfter(previous: string, next: string): string {
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(message)), timeoutMs)
+    const timer = window.setTimeout(() => reject(new Error(message)), timeoutMs)
     promise.then(
       (value) => {
-        clearTimeout(timer)
+        window.clearTimeout(timer)
         resolve(value)
       },
       (error) => {
-        clearTimeout(timer)
-        reject(error)
+        window.clearTimeout(timer)
+        reject(errorOf(error))
       },
     )
   })
@@ -311,9 +336,7 @@ async function createVolcengineSession(
   const receiveLoop = (async (): Promise<TranscriptResult> => {
     while (true) {
       const response = parseServerMessage(await client.receive())
-      const nextText = typeof response.data?.result?.text === "string"
-        ? response.data.result.text.trim()
-        : ""
+      const nextText = transcriptTextOf(response.data)
       if (nextText) finalText = nextText
 
       const nextStableText = stableTextOf(response.data)
@@ -358,7 +381,7 @@ async function createVolcengineSession(
       ))
     })
   }
-  const sendTimer = setInterval(() => {
+  const sendTimer = window.setInterval(() => {
     if (pending.length < chunkBytes) return
     const next = pending.subarray(0, chunkBytes)
     pending = pending.subarray(chunkBytes)
@@ -372,7 +395,7 @@ async function createVolcengineSession(
     stop() {
       if (!stopResult) {
         stopResult = (async () => {
-          clearInterval(sendTimer)
+          window.clearInterval(sendTimer)
           await recorder.stop()
           while (pending.length >= chunkBytes) {
             const next = pending.subarray(0, chunkBytes)
@@ -402,7 +425,7 @@ async function createVolcengineSession(
     async abort() {
       if (aborted) return
       aborted = true
-      clearInterval(sendTimer)
+      window.clearInterval(sendTimer)
       recorder.abort()
       pending = Buffer.alloc(0)
       await client.close()

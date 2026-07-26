@@ -1,4 +1,47 @@
 const TARGET_SAMPLE_RATE = 16000
+const WORKLET_NAME = "voice-text-input-pcm-capture"
+const WORKLET_SOURCE = `
+class VoiceTextInputCaptureProcessor extends AudioWorkletProcessor {
+  constructor() {
+    super()
+    this.buffer = new Float32Array(4096)
+    this.offset = 0
+    this.port.onmessage = (event) => {
+      if (event.data && event.data.type === "flush") {
+        this.flush()
+        this.port.postMessage({ type: "flushed" })
+      }
+    }
+  }
+
+  flush() {
+    if (this.offset === 0) return
+    const chunk = this.buffer.slice(0, this.offset)
+    this.port.postMessage(chunk, [chunk.buffer])
+    this.buffer = new Float32Array(4096)
+    this.offset = 0
+  }
+
+  process(inputs, outputs) {
+    const output = outputs[0] && outputs[0][0]
+    if (output) output.fill(0)
+    const input = inputs[0] && inputs[0][0]
+    if (!input) return true
+
+    let inputOffset = 0
+    while (inputOffset < input.length) {
+      const count = Math.min(this.buffer.length - this.offset, input.length - inputOffset)
+      this.buffer.set(input.subarray(inputOffset, inputOffset + count), this.offset)
+      this.offset += count
+      inputOffset += count
+      if (this.offset === this.buffer.length) this.flush()
+    }
+    return true
+  }
+}
+
+registerProcessor("${WORKLET_NAME}", VoiceTextInputCaptureProcessor)
+`
 
 export type PcmRecorder = {
   stop: () => Promise<void>
@@ -59,21 +102,51 @@ export async function startPcmRecording(onChunk: (chunk: Uint8Array) => void): P
 
   const audioContext = new AudioContextCtor({ sampleRate: TARGET_SAMPLE_RATE })
   const source = audioContext.createMediaStreamSource(stream)
-  const processor = audioContext.createScriptProcessor(4096, 1, 1)
+  const workletUrl = URL.createObjectURL(new Blob([WORKLET_SOURCE], { type: "text/javascript" }))
+  try {
+    await audioContext.audioWorklet.addModule(workletUrl)
+  } catch (error) {
+    stream.getTracks().forEach((track) => track.stop())
+    await audioContext.close().catch(() => undefined)
+    throw error
+  } finally {
+    URL.revokeObjectURL(workletUrl)
+  }
 
-  processor.onaudioprocess = (event) => {
-    const samples = resample(event.inputBuffer.getChannelData(0), audioContext.sampleRate)
-    onChunk(encodePcm16(samples))
+  const processor = new AudioWorkletNode(audioContext, WORKLET_NAME, {
+    numberOfInputs: 1,
+    numberOfOutputs: 1,
+    outputChannelCount: [1],
+  })
+  let flushResolver: (() => void) | undefined
+
+  processor.port.onmessage = (event) => {
+    const data: unknown = event.data
+    if (data instanceof Float32Array) {
+      const samples = resample(data, audioContext.sampleRate)
+      onChunk(encodePcm16(samples))
+      return
+    }
+    if (typeof data === "object" && data !== null && "type" in data && data.type === "flushed") {
+      flushResolver?.()
+      flushResolver = undefined
+    }
   }
 
   source.connect(processor)
   processor.connect(audioContext.destination)
 
   let released = false
-  const release = async () => {
+  const release = async (flush: boolean) => {
     if (released) return
     released = true
-    processor.onaudioprocess = null
+    if (flush) {
+      await new Promise<void>((resolve) => {
+        flushResolver = resolve
+        processor.port.postMessage({ type: "flush" })
+      })
+    }
+    processor.port.onmessage = null
     try {
       processor.disconnect()
       source.disconnect()
@@ -85,9 +158,9 @@ export async function startPcmRecording(onChunk: (chunk: Uint8Array) => void): P
   }
 
   return {
-    stop: release,
+    stop: () => release(true),
     abort() {
-      void release()
+      void release(false)
     },
   }
 }

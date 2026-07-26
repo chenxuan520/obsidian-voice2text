@@ -1,0 +1,20 @@
+import tsparser from "@typescript-eslint/parser"
+import { defineConfig } from "eslint/config"
+import obsidianmd from "eslint-plugin-obsidianmd"
+
+export default defineConfig([
+  ...obsidianmd.configs.recommended,
+  {
+    files: ["main.ts", "src/**/*.ts"],
+    languageOptions: {
+      parser: tsparser,
+      parserOptions: { project: "./tsconfig.json" },
+    },
+    rules: {
+      "obsidianmd/ui/sentence-case": ["warn", {
+        brands: ["Markdown", "MiMo", "WebSocket"],
+        acronyms: ["API", "ASR", "ID", "PCM", "WAV"],
+      }],
+    },
+  },
+])

@@ -7,38 +7,45 @@ import { mimoProvider } from "../src/providers/mimo"
 import { volcengineProvider } from "../src/providers/volcengine"
 import type { Voice2TextSettings, VoiceProvider } from "../src/types"
 
-type AudioEvent = {
-  inputBuffer: {
-    getChannelData: () => Float32Array
+type WorkletMessage = {
+  data: unknown
+}
+
+class FakeMessagePort {
+  onmessage: ((event: WorkletMessage) => void) | null = null
+
+  postMessage(message: unknown): void {
+    if (typeof message === "object" && message !== null && "type" in message && message.type === "flush") {
+      queueMicrotask(() => this.onmessage?.({ data: { type: "flushed" } }))
+    }
   }
 }
 
-type FakeProcessor = {
-  onaudioprocess: ((event: AudioEvent) => void) | null
-  connect: () => void
-  disconnect: () => void
+class FakeAudioWorkletNode {
+  readonly port = new FakeMessagePort()
+
+  constructor(_context: unknown, _name: string, _options: unknown) {
+    activeProcessor = this
+  }
+
+  connect(): void {}
+  disconnect(): void {}
 }
 
-let activeProcessor: FakeProcessor | undefined
+let activeProcessor: FakeAudioWorkletNode | undefined
 
 class FakeAudioContext {
   readonly sampleRate = 16000
   readonly destination = {}
+  readonly audioWorklet = {
+    async addModule(_url: string): Promise<void> {},
+  }
 
   createMediaStreamSource() {
     return {
       connect() {},
       disconnect() {},
     }
-  }
-
-  createScriptProcessor(): FakeProcessor {
-    activeProcessor = {
-      onaudioprocess: null,
-      connect() {},
-      disconnect() {},
-    }
-    return activeProcessor
   }
 
   async close(): Promise<void> {}
@@ -59,7 +66,18 @@ Object.defineProperty(globalThis, "navigator", {
 
 Object.defineProperty(globalThis, "window", {
   configurable: true,
-  value: { AudioContext: FakeAudioContext },
+  value: {
+    AudioContext: FakeAudioContext,
+    setTimeout: globalThis.setTimeout.bind(globalThis),
+    clearTimeout: globalThis.clearTimeout.bind(globalThis),
+    setInterval: globalThis.setInterval.bind(globalThis),
+    clearInterval: globalThis.clearInterval.bind(globalThis),
+  },
+})
+
+Object.defineProperty(globalThis, "AudioWorkletNode", {
+  configurable: true,
+  value: FakeAudioWorkletNode,
 })
 
 function providerConfig(local: any, providerId: "volcengine" | "mimo"): Record<string, unknown> {
@@ -126,12 +144,10 @@ function synthesizeSpeech(): Float32Array {
 }
 
 function feedAudio(samples: Float32Array): void {
-  assert(activeProcessor?.onaudioprocess, "recorder did not create an audio processor")
+  assert(activeProcessor?.port.onmessage, "recorder did not create an audio worklet")
   for (let offset = 0; offset < samples.length; offset += 4096) {
     const chunk = samples.slice(offset, Math.min(offset + 4096, samples.length))
-    activeProcessor.onaudioprocess({
-      inputBuffer: { getChannelData: () => chunk },
-    })
+    activeProcessor.port.onmessage({ data: chunk })
   }
 }
 
